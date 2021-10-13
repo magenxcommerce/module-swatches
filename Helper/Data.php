@@ -5,9 +5,9 @@
  */
 namespace Magento\Swatches\Helper;
 
-use Magento\Catalog\Api\Data\ProductAttributeMediaGalleryEntryInterface;
 use Magento\Catalog\Api\Data\ProductInterface as Product;
 use Magento\Catalog\Api\ProductRepositoryInterface;
+use Magento\Catalog\Helper\Image;
 use Magento\Catalog\Model\Product as ModelProduct;
 use Magento\Catalog\Model\Product\Image\UrlBuilder;
 use Magento\Catalog\Model\ResourceModel\Eav\Attribute;
@@ -35,7 +35,7 @@ class Data
     const EMPTY_IMAGE_VALUE = 'no_selection';
 
     /**
-     * The int value of the Default store ID
+     * Default store ID
      */
     const DEFAULT_STORE_ID = 0;
 
@@ -132,8 +132,6 @@ class Data
     }
 
     /**
-     * Assemble Additional Data for Eav Attribute
-     *
      * @param Attribute $attribute
      * @return $this
      */
@@ -183,8 +181,6 @@ class Data
     }
 
     /**
-     * Load first variation
-     *
      * @param string $attributeCode swatch_image|image
      * @param ModelProduct $configurableProduct
      * @param array $requiredAttributes
@@ -208,8 +204,6 @@ class Data
     }
 
     /**
-     * Load first variation with swatch image
-     *
      * @param Product $configurableProduct
      * @param array $requiredAttributes
      * @return bool|Product
@@ -220,8 +214,6 @@ class Data
     }
 
     /**
-     * Load first variation with image
-     *
      * @param Product $configurableProduct
      * @param array $requiredAttributes
      * @return bool|Product
@@ -254,14 +246,17 @@ class Data
         $this->addFilterByParent($productCollection, $parentId);
 
         $configurableAttributes = $this->getAttributesFromConfigurable($parentProduct);
-
-        $resultAttributesToFilter = [];
+        $allAttributesArray = [];
         foreach ($configurableAttributes as $attribute) {
-            $attributeCode = $attribute->getData('attribute_code');
-            if (array_key_exists($attributeCode, $attributes)) {
-                $resultAttributesToFilter[$attributeCode] = $attributes[$attributeCode];
+            if (!empty($attribute['default_value'])) {
+                $allAttributesArray[$attribute['attribute_code']] = $attribute['default_value'];
             }
         }
+
+        $resultAttributesToFilter = array_merge(
+            $attributes,
+            array_diff_key($allAttributesArray, $attributes)
+        );
 
         $this->addFilterByAttributes($productCollection, $resultAttributesToFilter);
 
@@ -274,8 +269,6 @@ class Data
     }
 
     /**
-     * Add filter by attribute
-     *
      * @param ProductCollection $productCollection
      * @param array $attributes
      * @return void
@@ -288,8 +281,6 @@ class Data
     }
 
     /**
-     * Add filter by parent
-     *
      * @param ProductCollection $productCollection
      * @param integer $parentId
      * @return void
@@ -308,7 +299,6 @@ class Data
 
     /**
      * Method getting full media gallery for current Product
-     *
      * Array structure: [
      *  ['image'] => 'http://url/pub/media/catalog/product/2/0/blabla.jpg',
      *  ['mediaGallery'] => [
@@ -317,68 +307,38 @@ class Data
      *      ...,
      *      ]
      * ]
-     *
      * @param ModelProduct $product
-     *
      * @return array
-     * @throws \Magento\Framework\Exception\LocalizedException
      */
-    public function getProductMediaGallery(ModelProduct $product): array
+    public function getProductMediaGallery(ModelProduct $product)
     {
         $baseImage = null;
         $gallery = [];
 
         $mediaGallery = $product->getMediaGalleryEntries();
-        /** @var ProductAttributeMediaGalleryEntryInterface $mediaEntry */
         foreach ($mediaGallery as $mediaEntry) {
             if ($mediaEntry->isDisabled()) {
                 continue;
             }
-            if (!$baseImage || $this->isMainImage($mediaEntry)) {
-                $baseImage = $mediaEntry;
+
+            if (in_array('image', $mediaEntry->getTypes(), true) || !$baseImage) {
+                $baseImage = $mediaEntry->getFile();
             }
 
-            $gallery[$mediaEntry->getId()] = $this->collectImageData($mediaEntry);
+            $gallery[$mediaEntry->getId()] = $this->getAllSizeImages($mediaEntry->getFile());
         }
 
         if (!$baseImage) {
             return [];
         }
 
-        $resultGallery = $this->collectImageData($baseImage);
+        $resultGallery = $this->getAllSizeImages($baseImage);
         $resultGallery['gallery'] = $gallery;
 
         return $resultGallery;
     }
 
     /**
-     * Checks if image is main image in gallery
-     *
-     * @param ProductAttributeMediaGalleryEntryInterface $mediaEntry
-     * @return bool
-     */
-    private function isMainImage(ProductAttributeMediaGalleryEntryInterface $mediaEntry): bool
-    {
-        return in_array('image', $mediaEntry->getTypes(), true);
-    }
-
-    /**
-     * Returns image data for swatches
-     *
-     * @param ProductAttributeMediaGalleryEntryInterface $mediaEntry
-     * @return array
-     */
-    private function collectImageData(ProductAttributeMediaGalleryEntryInterface $mediaEntry): array
-    {
-        $image = $this->getAllSizeImages($mediaEntry->getFile());
-        $image[ProductAttributeMediaGalleryEntryInterface::POSITION] =  $mediaEntry->getPosition();
-        $image['isMain'] =$this->isMainImage($mediaEntry);
-        return $image;
-    }
-
-    /**
-     * Get all size images
-     *
      * @param string $imageFile
      * @return array
      */
@@ -471,13 +431,13 @@ class Data
             $swatches = [];
             $fallbackValues = [];
             $currentStoreId = $this->storeManager->getStore()->getId();
-            foreach ($swatchCollection->getData() as $item) {
+            foreach ($swatchCollection as $item) {
                 if ($item['type'] != Swatch::SWATCH_TYPE_TEXTUAL) {
-                    $swatches[$item['option_id']] = $item;
+                    $swatches[$item['option_id']] = $item->getData();
                 } elseif ($item['store_id'] == $currentStoreId && $item['value'] != '') {
-                    $fallbackValues[$item['option_id']][$currentStoreId] = $item;
+                    $fallbackValues[$item['option_id']][$currentStoreId] = $item->getData();
                 } elseif ($item['store_id'] == self::DEFAULT_STORE_ID) {
-                    $fallbackValues[$item['option_id']][self::DEFAULT_STORE_ID] = $item;
+                    $fallbackValues[$item['option_id']][self::DEFAULT_STORE_ID] = $item->getData();
                 }
             }
 
@@ -516,8 +476,6 @@ class Data
     }
 
     /**
-     * Add fallback options
-     *
      * @param array $fallbackValues
      * @param array $swatches
      * @return array
@@ -529,8 +487,6 @@ class Data
             if (isset($optionsArray[$currentStoreId]['type'], $swatches[$optionId]['type'])
                 && $swatches[$optionId]['type'] === $optionsArray[$currentStoreId]['type']
             ) {
-                $swatches[$optionId] = $optionsArray[$currentStoreId];
-            } elseif (isset($optionsArray[$currentStoreId])) {
                 $swatches[$optionId] = $optionsArray[$currentStoreId];
             } elseif (isset($optionsArray[self::DEFAULT_STORE_ID])) {
                 $swatches[$optionId] = $optionsArray[self::DEFAULT_STORE_ID];

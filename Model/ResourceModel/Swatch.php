@@ -7,9 +7,8 @@
 namespace Magento\Swatches\Model\ResourceModel;
 
 /**
- * Swatch Resource Model
- *
  * @codeCoverageIgnore
+ * Swatch Resource Model
  * @api
  * @since 100.0.2
  */
@@ -26,10 +25,8 @@ class Swatch extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
     }
 
     /**
-     * Update default swatch option value.
-     *
-     * @param integer $id
      * @param string $defaultValue
+     * @param integer $id
      * @return void
      */
     public function saveDefaultSwatchOption($id, $defaultValue)
@@ -53,7 +50,7 @@ class Swatch extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
     {
         if (count($optionIDs)) {
             foreach ($optionIDs as $optionId) {
-                $where = ['option_id = ?' => $optionId];
+                $where = ['option_id' => $optionId];
                 if ($type !== null) {
                     $where['type = ?'] = $type;
                 }
